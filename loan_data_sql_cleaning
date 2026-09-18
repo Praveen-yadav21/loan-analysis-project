@@ -1,0 +1,154 @@
+-- ============================================
+-- LOAN DATA CLEANING - ALL QUERIES
+-- ============================================
+
+-- STEP 0: Table creation
+CREATE TABLE loan_data (
+    Loan_ID VARCHAR(20),
+    Gender VARCHAR(10),
+    Married VARCHAR(5),
+    Dependents VARCHAR(5),
+    Education VARCHAR(20),
+    Self_Employed VARCHAR(5),
+    ApplicantIncome INT,
+    CoapplicantIncome FLOAT,
+    LoanAmount FLOAT,
+    Loan_Amount_Term FLOAT,
+    Credit_History FLOAT,
+    Property_Area VARCHAR(20),
+    Loan_Status VARCHAR(5)
+);
+
+-- STEP 1: Missing values check
+SELECT 
+    COUNT(*) AS total_rows,
+    COUNT(*) - COUNT(gender) AS missing_gender,
+    COUNT(*) - COUNT(married) AS missing_married,
+    COUNT(*) - COUNT(dependents) AS missing_dependents,
+    COUNT(*) - COUNT(self_employed) AS missing_self_employed,
+    COUNT(*) - COUNT(loanamount) AS missing_loanamount,
+    COUNT(*) - COUNT(loan_amount_term) AS missing_loan_term,
+    COUNT(*) - COUNT(credit_history) AS missing_credit_history
+FROM loan_data;
+
+-- Gender: mode check + fix
+SELECT gender, COUNT(*) 
+FROM loan_data 
+GROUP BY gender 
+ORDER BY COUNT(*) DESC;
+
+UPDATE loan_data
+SET gender = 'Male'
+WHERE gender IS NULL;
+
+-- Married: mode check + fix
+SELECT married, COUNT(*) AS total_count
+FROM loan_data 
+GROUP BY married 
+ORDER BY total_count DESC;
+
+UPDATE loan_data 
+SET married = 'Yes'
+WHERE married IS NULL;
+
+-- Dependents: mode check + fix
+SELECT dependents, COUNT(*) AS total_count
+FROM loan_data 
+GROUP BY dependents 
+ORDER BY total_count DESC;
+
+UPDATE loan_data 
+SET dependents = '0'
+WHERE dependents IS NULL;
+
+-- Self_Employed: mode check + fix
+SELECT self_employed, COUNT(*) AS total_count
+FROM loan_data 
+GROUP BY self_employed 
+ORDER BY total_count DESC;
+
+UPDATE loan_data 
+SET self_employed = 'No'
+WHERE self_employed IS NULL;
+
+-- LoanAmount: median fix
+UPDATE loan_data
+SET loanamount = (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY loanamount) FROM loan_data)
+WHERE loanamount IS NULL;
+
+-- Loan_Amount_Term: median fix
+UPDATE loan_data
+SET loan_amount_term = (SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY loan_amount_term) FROM loan_data)
+WHERE loan_amount_term IS NULL;
+
+-- Credit_History: mode fix
+UPDATE loan_data
+SET credit_history = (SELECT credit_history FROM loan_data GROUP BY credit_history ORDER BY COUNT(*) DESC LIMIT 1)
+WHERE credit_history IS NULL;
+
+-- STEP 2: Duplicate rows check
+SELECT loan_id, COUNT(*) 
+FROM loan_data
+GROUP BY loan_id
+HAVING COUNT(*) > 1;
+
+-- STEP 3: Text standardization (Whitespace check)
+SELECT * FROM loan_data
+WHERE loan_id <> TRIM(loan_id)
+   OR gender <> TRIM(gender)
+   OR married <> TRIM(married)
+   OR dependents <> TRIM(dependents)
+   OR education <> TRIM(education)
+   OR self_employed <> TRIM(self_employed)
+   OR property_area <> TRIM(property_area)
+   OR loan_status <> TRIM(loan_status);
+
+-- STEP 4: Spelling & inconsistent values check
+SELECT DISTINCT gender FROM loan_data;
+SELECT DISTINCT married FROM loan_data;
+SELECT DISTINCT education FROM loan_data;
+SELECT DISTINCT self_employed FROM loan_data;
+SELECT DISTINCT property_area FROM loan_data;
+SELECT DISTINCT loan_status FROM loan_data;
+
+-- STEP 5: Data types verify
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'loan_data';
+
+-- STEP 6: Invalid/logical values check
+SELECT * FROM loan_data 
+WHERE applicantincome < 0 
+   OR coapplicantincome < 0 
+   OR loanamount < 0
+   OR loan_amount_term <= 0
+   OR credit_history NOT IN (0, 1);
+
+-- STEP 7: Outliers check (using percentile/IQR method)
+SELECT 
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY applicantincome) AS applicant_q3,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY coapplicantincome) AS coapplicant_q3,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY loanamount) AS loanamount_q3
+FROM loan_data;
+
+SELECT 
+    COUNT(*) FILTER (WHERE applicantincome > 10171.25) AS applicant_outliers,
+    COUNT(*) FILTER (WHERE coapplicantincome > 5743.125) AS coapplicant_outliers,
+    COUNT(*) FILTER (WHERE loanamount > 261.5) AS loanamount_outliers
+FROM loan_data;
+
+-- STEP 8: Final validation (dobara missing values + duplicate check)
+SELECT 
+    COUNT(*) - COUNT(gender) AS missing_gender,
+    COUNT(*) - COUNT(married) AS missing_married,
+    COUNT(*) - COUNT(dependents) AS missing_dependents,
+    COUNT(*) - COUNT(self_employed) AS missing_self_employed,
+    COUNT(*) - COUNT(loanamount) AS missing_loanamount,
+    COUNT(*) - COUNT(loan_amount_term) AS missing_loan_term,
+    COUNT(*) - COUNT(credit_history) AS missing_credit_history
+FROM loan_data;
+
+SELECT loan_id, COUNT(*) 
+FROM loan_data
+GROUP BY loan_id
+HAVING COUNT(*) > 1;
